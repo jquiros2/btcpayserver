@@ -781,9 +781,10 @@ namespace BTCPayServer.Tests
             var newDeliveryId = await clientProfile.RedeliverWebhook(user.StoreId, hook.Id, delivery.Id);
             req = await fakeServer.GetNextRequest();
             req.Response.StatusCode = 404;
-            fakeServer.Done();
             await TestUtils.EventuallyAsync(async () =>
             {
+                // Releasing semaphore several times may help making this test less flaky
+                fakeServer.Done();
                 var newDelivery = await clientProfile.GetWebhookDelivery(user.StoreId, hook.Id, newDeliveryId);
                 Assert.NotNull(newDelivery);
                 Assert.Equal(404, newDelivery.HttpCode);
@@ -1025,6 +1026,38 @@ namespace BTCPayServer.Tests
 
         [Fact(Timeout = TestTimeout)]
         [Trait("Integration", "Integration")]
+        public async Task CanOverpayInvoice()
+        {
+            using (var tester = ServerTester.Create())
+            {
+                await tester.StartAsync();
+                var user = tester.NewAccount();
+                await user.RegisterDerivationSchemeAsync("BTC");
+                var client = await user.CreateClient();
+                var invoice = await client.CreateInvoice(user.StoreId, new CreateInvoiceRequest() { Amount = 5000.0m, Currency = "USD" });
+                var methods = await client.GetInvoicePaymentMethods(user.StoreId, invoice.Id);
+                var method = methods.First();
+                var amount = method.Amount;
+                Assert.Equal(amount, method.Due);
+#pragma warning disable CS0618 // Type or member is obsolete
+                var btc = tester.NetworkProvider.BTC.NBitcoinNetwork;
+#pragma warning restore CS0618 // Type or member is obsolete
+                await tester.ExplorerNode.SendToAddressAsync(BitcoinAddress.Create(method.Destination, btc), Money.Coins(method.Due) + Money.Coins(1.0m));
+                await TestUtils.EventuallyAsync(async () =>
+                {
+                    invoice = await client.GetInvoice(user.StoreId, invoice.Id);
+                    Assert.True(invoice.Status == InvoiceStatus.Processing);
+                    methods = await client.GetInvoicePaymentMethods(user.StoreId, invoice.Id);
+                    method = methods.First();
+                    Assert.Equal(amount, method.Amount);
+                    Assert.Equal(-1.0m, method.Due);
+                    Assert.Equal(amount + 1.0m, method.TotalPaid);
+                });
+            }
+        }
+
+        [Fact(Timeout = TestTimeout)]
+        [Trait("Integration", "Integration")]
         public async Task InvoiceTests()
         {
             using (var tester = ServerTester.Create())
@@ -1155,10 +1188,16 @@ namespace BTCPayServer.Tests
                 //update
                 newInvoice = await client.CreateInvoice(user.StoreId,
                     new CreateInvoiceRequest() { Currency = "USD", Amount = 1 });
+               Assert.Contains(InvoiceStatus.Settled, newInvoice.AvailableStatusesForManualMarking);
+               Assert.Contains(InvoiceStatus.Invalid, newInvoice.AvailableStatusesForManualMarking);
                 await client.MarkInvoiceStatus(user.StoreId, newInvoice.Id, new MarkInvoiceStatusRequest()
                 {
                     Status = InvoiceStatus.Settled
                 });
+                newInvoice = await client.GetInvoice(user.StoreId, newInvoice.Id);
+                
+                Assert.DoesNotContain(InvoiceStatus.Settled, newInvoice.AvailableStatusesForManualMarking);
+                Assert.Contains(InvoiceStatus.Invalid, newInvoice.AvailableStatusesForManualMarking);
                 newInvoice = await client.CreateInvoice(user.StoreId,
                     new CreateInvoiceRequest() { Currency = "USD", Amount = 1 });
                 await client.MarkInvoiceStatus(user.StoreId, newInvoice.Id, new MarkInvoiceStatusRequest()
@@ -1166,6 +1205,10 @@ namespace BTCPayServer.Tests
                     Status = InvoiceStatus.Invalid
                 });
 
+                newInvoice = await client.GetInvoice(user.StoreId, newInvoice.Id);
+                
+                Assert.Contains(InvoiceStatus.Settled, newInvoice.AvailableStatusesForManualMarking);
+                Assert.DoesNotContain(InvoiceStatus.Invalid, newInvoice.AvailableStatusesForManualMarking);
                 await AssertHttpError(403, async () =>
                 {
                     await viewOnly.UpdateInvoice(user.StoreId, invoice.Id,
@@ -1315,6 +1358,40 @@ namespace BTCPayServer.Tests
                         }
                     });
                 Assert.Equal("BTC", invoiceWithdefaultPaymentMethodOnChain.Checkout.DefaultPaymentMethod);
+                
+                store = await client.GetStore(user.StoreId);
+                store.LazyPaymentMethods = false;
+                store = await client.UpdateStore(store.Id,
+                    JObject.FromObject(store).ToObject<UpdateStoreRequest>());
+                
+                
+                //let's see the overdue amount 
+                invoice = await client.CreateInvoice(user.StoreId,
+                    new CreateInvoiceRequest()
+                    {
+                        Currency = "BTC",
+                        Amount = 0.0001m,
+                        Checkout = new CreateInvoiceRequest.CheckoutOptions()
+                        {
+                            PaymentMethods = new[] { "BTC" },
+                            DefaultPaymentMethod = "BTC" 
+                        }
+                    });
+                var pm = Assert.Single(await client.GetInvoicePaymentMethods(user.StoreId, invoice.Id));
+               Assert.Equal(0.0001m, pm.Due);
+               
+               await tester.WaitForEvent<NewOnChainTransactionEvent>(async () =>
+               {
+                   await tester.ExplorerNode.SendToAddressAsync(
+                       BitcoinAddress.Create(pm.Destination, tester.ExplorerClient.Network.NBitcoinNetwork),
+                       new Money(0.0002m, MoneyUnit.BTC));
+               });
+               await TestUtils.EventuallyAsync(async () =>
+               {
+                   var pm = Assert.Single(await client.GetInvoicePaymentMethods(user.StoreId, invoice.Id));
+                   Assert.Single(pm.Payments);
+                   Assert.Equal(-0.0001m, pm.Due);
+               });
             }
         }
 
@@ -1953,6 +2030,7 @@ namespace BTCPayServer.Tests
             var admin = tester.NewAccount();
             await admin.GrantAccessAsync(true);
             var adminClient = await admin.CreateClient(Policies.Unrestricted);
+            var viewerOnlyClient = await admin.CreateClient(Policies.CanViewStoreSettings);
             var store = await adminClient.GetStore(admin.StoreId);
 
             Assert.Empty(await adminClient.GetStorePaymentMethods(store.Id));
@@ -1985,6 +2063,29 @@ namespace BTCPayServer.Tests
             Assert.Equal(2, methods.Count);
             VerifyLightning(methods);
             VerifyOnChain(methods);
+            
+            
+            methods = await viewerOnlyClient.GetStorePaymentMethods(store.Id);
+            
+            VerifyLightning(methods);
+
+            
+            
+           await  adminClient.UpdateStoreLightningNetworkPaymentMethod(store.Id, "BTC",
+                new UpdateLightningNetworkPaymentMethodRequest(
+                    tester.GetLightningConnectionString(LightningConnectionType.CLightning, true), true));
+            methods = await viewerOnlyClient.GetStorePaymentMethods(store.Id);
+            
+            Assert.True(methods.TryGetValue(new PaymentMethodId("BTC", PaymentTypes.LightningLike).ToStringNormalized(), out var item));
+            var lightningNetworkPaymentMethodBaseData =Assert.IsType<JObject>(item.Data).ToObject<LightningNetworkPaymentMethodBaseData>();
+            Assert.Equal("*NEED CanModifyStoreSettings PERMISSION TO VIEW*", lightningNetworkPaymentMethodBaseData.ConnectionString);
+            
+            
+            methods = await adminClient.GetStorePaymentMethods(store.Id);
+            
+            Assert.True(methods.TryGetValue(new PaymentMethodId("BTC", PaymentTypes.LightningLike).ToStringNormalized(), out item));
+            lightningNetworkPaymentMethodBaseData =Assert.IsType<JObject>(item.Data).ToObject<LightningNetworkPaymentMethodBaseData>();
+            Assert.NotEqual("*NEED CanModifyStoreSettings PERMISSION TO VIEW*", lightningNetworkPaymentMethodBaseData.ConnectionString);
             
 
         }

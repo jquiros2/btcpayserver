@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Globalization;
@@ -355,37 +356,49 @@ namespace BTCPayServer.Controllers.GreenField
                         PaymentMethod = method.GetId().ToStringNormalized(),
                         Destination = details.GetPaymentDestination(),
                         Rate = method.Rate,
-                        Due = accounting.Due.ToDecimal(MoneyUnit.BTC),
+                        Due = accounting.DueUncapped.ToDecimal(MoneyUnit.BTC),
                         TotalPaid = accounting.Paid.ToDecimal(MoneyUnit.BTC),
                         PaymentMethodPaid = accounting.CryptoPaid.ToDecimal(MoneyUnit.BTC),
-                        Amount = accounting.Due.ToDecimal(MoneyUnit.BTC),
+                        Amount = accounting.TotalDue.ToDecimal(MoneyUnit.BTC),
                         NetworkFee = accounting.NetworkFee.ToDecimal(MoneyUnit.BTC),
                         PaymentLink =
                             method.GetId().PaymentType.GetPaymentLink(method.Network, details, accounting.Due,
                                 Request.GetAbsoluteRoot()),
-                        Payments = payments.Select(paymentEntity =>
-                        {
-                            var data = paymentEntity.GetCryptoPaymentData();
-                            return new InvoicePaymentMethodDataModel.Payment()
-                            {
-                                Destination = data.GetDestination(),
-                                Id = data.GetPaymentId(),
-                                Status = !paymentEntity.Accounted
-                                    ? InvoicePaymentMethodDataModel.Payment.PaymentStatus.Invalid
-                                    : data.PaymentConfirmed(paymentEntity, entity.SpeedPolicy) ||
-                                      data.PaymentCompleted(paymentEntity)
-                                        ? InvoicePaymentMethodDataModel.Payment.PaymentStatus.Settled
-                                        : InvoicePaymentMethodDataModel.Payment.PaymentStatus.Processing,
-                                Fee = paymentEntity.NetworkFee,
-                                Value = data.GetValue(),
-                                ReceivedDate = paymentEntity.ReceivedTime.DateTime
-                            };
-                        }).ToList()
+                        Payments = payments.Select(paymentEntity => ToPaymentModel(entity, paymentEntity)).ToList()
                     };
                 }).ToArray();
         }
+        
+        public static InvoicePaymentMethodDataModel.Payment ToPaymentModel(InvoiceEntity entity, PaymentEntity paymentEntity)
+        {
+            var data = paymentEntity.GetCryptoPaymentData();
+            return new InvoicePaymentMethodDataModel.Payment()
+            {
+                Destination = data.GetDestination(),
+                Id = data.GetPaymentId(),
+                Status = !paymentEntity.Accounted
+                    ? InvoicePaymentMethodDataModel.Payment.PaymentStatus.Invalid
+                    : data.PaymentConfirmed(paymentEntity, entity.SpeedPolicy) || data.PaymentCompleted(paymentEntity)
+                        ? InvoicePaymentMethodDataModel.Payment.PaymentStatus.Settled
+                        : InvoicePaymentMethodDataModel.Payment.PaymentStatus.Processing,
+                Fee = paymentEntity.NetworkFee,
+                Value = data.GetValue(),
+                ReceivedDate = paymentEntity.ReceivedTime.DateTime
+            };
+        }
         private InvoiceData ToModel(InvoiceEntity entity)
         {
+            var statuses = new List<InvoiceStatus>();
+            var state = entity.GetInvoiceState();
+            if (state.CanMarkComplete())
+            {
+                statuses.Add(InvoiceStatus.Settled);
+            }
+
+            if (state.CanMarkInvalid())
+            {
+                statuses.Add(InvoiceStatus.Invalid);
+            }
             return new InvoiceData()
             {
                 StoreId = entity.StoreId,
@@ -400,6 +413,7 @@ namespace BTCPayServer.Controllers.GreenField
                 AdditionalStatus = entity.ExceptionStatus,
                 Currency = entity.Currency,
                 Metadata = entity.Metadata.ToJObject(),
+                AvailableStatusesForManualMarking = statuses.ToArray(),
                 Checkout = new CreateInvoiceRequest.CheckoutOptions()
                 {
                     Expiration = entity.ExpirationTime - entity.InvoiceTime,

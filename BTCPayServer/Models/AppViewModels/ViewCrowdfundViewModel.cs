@@ -73,15 +73,17 @@ namespace BTCPayServer.Models.AppViewModels
 
         public bool Ended => EndDate.HasValue && DateTime.UtcNow > EndDate;
         public bool DisplayPerksRanking { get; set; }
+        public bool DisplayPerksValue { get; set; }
         public bool Enabled { get; set; }
         public string ResetEvery { get; set; }
         public Dictionary<string, CurrencyData> CurrencyDataPayments { get; set; }
+        public Dictionary<string, decimal> PerkValue { get; set; }
     }
 
     public class ContributeToCrowdfund
     {
         public ViewCrowdfundViewModel ViewCrowdfundViewModel { get; set; }
-        [Required] public decimal Amount { get; set; }
+        [Required] public decimal? Amount { get; set; }
         public string Email { get; set; }
         public string ChoiceKey { get; set; }
         public bool RedirectToCheckout { get; set; }

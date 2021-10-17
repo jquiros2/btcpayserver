@@ -58,12 +58,16 @@ canvas#fireworks {
 }
 
 .modal-body .perks-container .card:only-of-type {
-    max-width: 320px;
+    min-width: 240px;
+    max-width: 480px;
     margin: auto;
 }
 
 /* Constrain image width in description */
-div#crowdfund-body-description img {
+div#crowdfund-body-description img,
+div#crowdfund-body-description embed,
+div#crowdfund-body-description object,
+div#crowdfund-body-description iframe {
     max-width: 100% !important;
 }
 

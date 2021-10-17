@@ -1,34 +1,21 @@
 var app = null;
 var eventAggregator = new Vue();
 
-function addLoadEvent(func) {
-    var oldonload = window.onload;
-    if (typeof window.onload != 'function') {
-        window.onload = func;
-    } else {
-        window.onload = function() {
-            if (oldonload) {
-                oldonload();
-            }
-            func();
-        }
-    }
-}
-addLoadEvent(function (ev) {
+document.addEventListener("DOMContentLoaded",function (ev) {
     Vue.use(Toasted);
 
     Vue.component('contribute', {
-        props: ["targetCurrency", "active", "perks", "inModal", "displayPerksRanking", "loading"],
+        props: ["targetCurrency", "active", "perks", "inModal", "displayPerksRanking", "perksValue", "loading"],
         template: "#contribute-template"
     });
 
     Vue.component('perks', {
-        props: ["perks", "targetCurrency", "active", "inModal","displayPerksRanking", "loading"],
+        props: ["perks", "targetCurrency", "active", "inModal","displayPerksRanking", "perksValue", "loading"],
         template: "#perks-template"
     });
 
     Vue.component('perk', {
-        props: ["perk", "targetCurrency", "active", "inModal", "displayPerksRanking", "index", "loading"],
+        props: ["perk", "targetCurrency", "active", "inModal", "displayPerksRanking", "perksValue", "index", "loading"],
         template: "#perk-template",
         data: function () {
             return {
@@ -38,7 +25,7 @@ addLoadEvent(function (ev) {
         },
         computed: {
             canExpand: function(){
-                return !this.expanded && this.active && (this.perk.price.value || this.perk.custom) && (this.perk.inventory==null || this.perk.inventory > 0)
+                return !this.expanded && this.active && (this.perk.price.type !== 2 || this.perk.price.value) && (this.perk.inventory==null || this.perk.inventory > 0)
             }
         },
         methods: {
@@ -58,7 +45,7 @@ addLoadEvent(function (ev) {
                 }
             },
             setAmount: function (amount) {
-                this.amount = (amount || 0).noExponents();
+                this.amount = this.perk.price.type === 0? null : (amount || 0).noExponents();
                 this.expanded = false;
             }
 
@@ -69,7 +56,9 @@ addLoadEvent(function (ev) {
         },
         watch: {
             perk: function (newValue, oldValue) {
-                if (newValue.price.value != oldValue.price.value) {
+                if(newValue.price.type ===0){
+                    this.setAmount();
+                }else if (newValue.price.value != oldValue.price.value) {
                     this.setAmount(newValue.price.value);
                 }
             }
@@ -158,6 +147,9 @@ addLoadEvent(function (ev) {
                     var currentPerk = this.srvModel.perks[i];
                     if(this.srvModel.perkCount.hasOwnProperty(currentPerk.id)){
                         currentPerk.sold = this.srvModel.perkCount[currentPerk.id];
+                    }
+                    if(this.srvModel.perkValue.hasOwnProperty(currentPerk.id)){
+                        currentPerk.value = this.srvModel.perkValue[currentPerk.id];
                     }
                     result.push(currentPerk);
                 }

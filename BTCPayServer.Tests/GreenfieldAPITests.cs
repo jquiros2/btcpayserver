@@ -440,9 +440,11 @@ namespace BTCPayServer.Tests
                 Assert.Null(payout.PaymentMethodAmount);
 
                 Logs.Tester.LogInformation("Can't overdraft");
+                
+                var destination2 = (await tester.ExplorerNode.GetNewAddressAsync()).ToString();
                 await this.AssertAPIError("overdraft", async () => await unauthenticated.CreatePayout(pps[0].Id, new CreatePayoutRequest()
                 {
-                    Destination = destination,
+                    Destination = destination2,
                     Amount = 0.00001m,
                     PaymentMethod = "BTC"
                 }));
@@ -450,7 +452,7 @@ namespace BTCPayServer.Tests
                 Logs.Tester.LogInformation("Can't create too low payout");
                 await this.AssertAPIError("amount-too-low", async () => await unauthenticated.CreatePayout(pps[0].Id, new CreatePayoutRequest()
                 {
-                    Destination = destination,
+                    Destination = destination2,
                     PaymentMethod = "BTC"
                 }));
 
@@ -1073,7 +1075,7 @@ namespace BTCPayServer.Tests
                 //create
 
                 //validation errors
-                await AssertValidationError(new[] { nameof(CreateInvoiceRequest.Currency), nameof(CreateInvoiceRequest.Amount), $"{nameof(CreateInvoiceRequest.Checkout)}.{nameof(CreateInvoiceRequest.Checkout.PaymentTolerance)}", $"{nameof(CreateInvoiceRequest.Checkout)}.{nameof(CreateInvoiceRequest.Checkout.PaymentMethods)}[0]" }, async () =>
+                await AssertValidationError(new[] { nameof(CreateInvoiceRequest.Amount), $"{nameof(CreateInvoiceRequest.Checkout)}.{nameof(CreateInvoiceRequest.Checkout.PaymentTolerance)}", $"{nameof(CreateInvoiceRequest.Checkout)}.{nameof(CreateInvoiceRequest.Checkout.PaymentMethods)}[0]" }, async () =>
                {
                    await client.CreateInvoice(user.StoreId, new CreateInvoiceRequest() { Amount = -1, Checkout = new CreateInvoiceRequest.CheckoutOptions() { PaymentTolerance = -2, PaymentMethods = new[] { "jasaas_sdsad" } } });
                });
@@ -1977,10 +1979,13 @@ namespace BTCPayServer.Tests
 
         }
 
-        [Fact(Timeout = TestTimeout)]
+        [Theory(Timeout = TestTimeout)]
+        [InlineData("DE-de")]
+        [InlineData("")]
         [Trait("Fast", "Fast")]
-        public void NumericJsonConverterTests()
+        public void NumericJsonConverterTests(string culture)
         {
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo(culture);
             JsonReader Get(string val)
             {
                 return new JsonTextReader(new StringReader(val));
@@ -2040,7 +2045,7 @@ namespace BTCPayServer.Tests
             void VerifyLightning(Dictionary<string, GenericPaymentMethodData> dictionary)
             {
                 Assert.True(dictionary.TryGetValue(new PaymentMethodId("BTC", PaymentTypes.LightningLike).ToStringNormalized(), out var item));
-                var lightningNetworkPaymentMethodBaseData =Assert.IsType<JObject>(item.Data).ToObject<LightningNetworkPaymentMethodBaseData>();
+                var lightningNetworkPaymentMethodBaseData = Assert.IsType<JObject>(item.Data).ToObject<LightningNetworkPaymentMethodBaseData>();
                 Assert.Equal("Internal Node", lightningNetworkPaymentMethodBaseData.ConnectionString);
             }
 
@@ -2055,7 +2060,7 @@ namespace BTCPayServer.Tests
             void VerifyOnChain(Dictionary<string, GenericPaymentMethodData> dictionary)
             {
                 Assert.True(dictionary.TryGetValue(new PaymentMethodId("BTC", PaymentTypes.BTCLike).ToStringNormalized(), out var item));
-                var paymentMethodBaseData =Assert.IsType<JObject>(item.Data).ToObject<OnChainPaymentMethodBaseData>();
+                var paymentMethodBaseData = Assert.IsType<JObject>(item.Data).ToObject<OnChainPaymentMethodBaseData>();
                 Assert.Equal(randK, paymentMethodBaseData.DerivationScheme);
             }
             
@@ -2089,6 +2094,5 @@ namespace BTCPayServer.Tests
             
 
         }
-
     }
 }

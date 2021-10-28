@@ -216,10 +216,9 @@ namespace BTCPayServer.HostedServices
                 case InvoiceEventCode.Created:
                     return new WebhookInvoiceEvent(WebhookEventType.InvoiceCreated);
                 case InvoiceEventCode.Expired:
-                case InvoiceEventCode.ExpiredPaidPartial:
                     return new WebhookInvoiceExpiredEvent(WebhookEventType.InvoiceExpired)
                     {
-                        PartiallyPaid = eventCode == InvoiceEventCode.ExpiredPaidPartial
+                        PartiallyPaid = invoiceEvent.PaidPartial
                     };
                 case InvoiceEventCode.FailedToConfirm:
                 case InvoiceEventCode.MarkedInvalid:
@@ -244,7 +243,8 @@ namespace BTCPayServer.HostedServices
                     {
                         AfterExpiration = invoiceEvent.Invoice.Status.ToModernStatus() == InvoiceStatus.Expired || invoiceEvent.Invoice.Status.ToModernStatus() == InvoiceStatus.Invalid,
                         PaymentMethod = invoiceEvent.Payment.GetPaymentMethodId().ToStringNormalized(),
-                        Payment = GreenFieldInvoiceController.ToPaymentModel(invoiceEvent.Invoice, invoiceEvent.Payment)
+                        Payment = GreenFieldInvoiceController.ToPaymentModel(invoiceEvent.Invoice, invoiceEvent.Payment),
+                        OverPaid = invoiceEvent.Invoice.ExceptionStatus == InvoiceExceptionStatus.PaidOver,
                     };
                 default:
                     return null;

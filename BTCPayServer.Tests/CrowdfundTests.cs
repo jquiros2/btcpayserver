@@ -38,8 +38,8 @@ namespace BTCPayServer.Tests
                 var apps2 = user2.GetController<AppsController>();
                 var vm = Assert.IsType<CreateAppViewModel>(Assert.IsType<ViewResult>(apps.CreateApp().Result).Model);
                 Assert.NotNull(vm.SelectedAppType);
-                Assert.Null(vm.Name);
-                vm.Name = "test";
+                Assert.Null(vm.AppName);
+                vm.AppName = "test";
                 vm.SelectedAppType = AppType.Crowdfund.ToString();
                 var redirectToAction = Assert.IsType<RedirectToActionResult>(apps.CreateApp(vm).Result);
                 Assert.Equal(nameof(apps.UpdateCrowdfund), redirectToAction.ActionName);
@@ -75,7 +75,7 @@ namespace BTCPayServer.Tests
                 user.RegisterDerivationScheme("BTC");
                 var apps = user.GetController<AppsController>();
                 var vm = Assert.IsType<CreateAppViewModel>(Assert.IsType<ViewResult>(apps.CreateApp().Result).Model);
-                vm.Name = "test";
+                vm.AppName = "test";
                 vm.SelectedAppType = AppType.Crowdfund.ToString();
                 Assert.IsType<RedirectToActionResult>(apps.CreateApp(vm).Result);
                 var appId = Assert.IsType<ListAppsViewModel>(Assert.IsType<ViewResult>(apps.ListApps().Result).Model)
@@ -163,12 +163,12 @@ namespace BTCPayServer.Tests
             {
                 await tester.StartAsync();
                 var user = tester.NewAccount();
-                user.GrantAccess();
+                await user.GrantAccessAsync();
                 user.RegisterDerivationScheme("BTC");
                 await user.SetNetworkFeeMode(NetworkFeeMode.Never);
                 var apps = user.GetController<AppsController>();
                 var vm = Assert.IsType<CreateAppViewModel>(Assert.IsType<ViewResult>(apps.CreateApp().Result).Model);
-                vm.Name = "test";
+                vm.AppName = "test";
                 vm.SelectedAppType = AppType.Crowdfund.ToString();
                 Assert.IsType<RedirectToActionResult>(apps.CreateApp(vm).Result);
                 var appId = Assert.IsType<ListAppsViewModel>(Assert.IsType<ViewResult>(apps.ListApps().Result).Model)

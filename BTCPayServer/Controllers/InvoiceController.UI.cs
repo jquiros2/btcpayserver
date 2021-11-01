@@ -107,7 +107,7 @@ namespace BTCPayServer.Controllers
             {
                 StoreId = store.Id,
                 StoreName = store.StoreName,
-                StoreLink = Url.Action(nameof(StoresController.UpdateStore), "Stores", new { storeId = store.Id }),
+                StoreLink = Url.Action(nameof(StoresController.PaymentMethods), "Stores", new { storeId = store.Id }),
                 PaymentRequestLink = Url.Action(nameof(PaymentRequestController.ViewPaymentRequest), "PaymentRequest", new { id = invoice.Metadata.PaymentRequestId }),
                 Id = invoice.Id,
                 State = invoiceState.ToString(),
@@ -199,8 +199,9 @@ namespace BTCPayServer.Controllers
                 // TODO: What if no option?
                 var refund = new RefundModel();
                 refund.Title = "Select a payment method";
-                refund.AvailablePaymentMethods = new SelectList(options.Select(id => new SelectListItem(id.ToPrettyString(), id.ToString())), "Value", "Text");
-                refund.SelectedPaymentMethod = defaultRefund?.ToString() ?? options.Select(o => o.CryptoCode).First();
+                refund.AvailablePaymentMethods = 
+                    new SelectList(options.Select(id => new SelectListItem(id.ToPrettyString(), id.ToString())), "Value", "Text");
+                refund.SelectedPaymentMethod = defaultRefund?.ToString() ?? options.First().ToString();
 
                 // Nothing to select, skip to next
                 if (refund.AvailablePaymentMethods.Count() == 1)
@@ -235,7 +236,14 @@ namespace BTCPayServer.Controllers
                 case RefundSteps.SelectPaymentMethod:
                     model.RefundStep = RefundSteps.SelectRate;
                     model.Title = "What to refund?";
-                    var paymentMethod = invoice.GetPaymentMethods()[paymentMethodId];
+                    var pms = invoice.GetPaymentMethods();
+                    var paymentMethod = pms.SingleOrDefault(method => method.GetId() == paymentMethodId);
+                    
+                    //TODO: Make this clean
+                    if (paymentMethod is null && paymentMethodId.PaymentType == LightningPaymentType.Instance)
+                    {
+                        paymentMethod = pms[new PaymentMethodId(paymentMethodId.CryptoCode, PaymentTypes.LNURLPay)];
+                    }
                     var cryptoPaid = paymentMethod.Calculate().Paid.ToDecimal(MoneyUnit.BTC);
                     var paidCurrency =
                         Math.Round(cryptoPaid * paymentMethod.Rate,
@@ -334,7 +342,7 @@ namespace BTCPayServer.Controllers
             var ppId = await _paymentHostedService.CreatePullPayment(createPullPayment);
             this.TempData.SetStatusMessageModel(new StatusMessageModel()
             {
-                Html = "Refund successfully created!<br />Share the link to this page with a customer.<br />The customer needs to enter their address and claim the refund.<br />Once a customer claims the refund, you will get a notification and would need to approve and initiate it from your Wallet > Manage > Payouts.",
+                Html = "Refund successfully created!<br />Share the link to this page with a customer.<br />The customer needs to enter their address and claim the refund.<br />Once a customer claims the refund, you will get a notification and would need to approve and initiate it from your Store > Payouts.",
                 Severity = StatusMessageModel.StatusSeverity.Success
             });
             (await ctx.Invoices.FindAsync(new[] { invoice.Id }, cancellationToken: cancellationToken)).CurrentRefundId = ppId;
@@ -636,12 +644,14 @@ namespace BTCPayServer.Controllers
 
         [HttpGet]
         [Route("i/{invoiceId}/status")]
-        [Route("i/{invoiceId}/{paymentMethodId}/status")]
+        [Route("i/{invoiceId}/{implicitPaymentMethodId}/status")]
         [Route("invoice/{invoiceId}/status")]
-        [Route("invoice/{invoiceId}/{paymentMethodId}/status")]
+        [Route("invoice/{invoiceId}/{implicitPaymentMethodId}/status")]
         [Route("invoice/status")]
-        public async Task<IActionResult> GetStatus(string invoiceId, string? paymentMethodId = null, [FromQuery] string? lang = null)
+        public async Task<IActionResult> GetStatus(string invoiceId, string? paymentMethodId = null, string? implicitPaymentMethodId = null, [FromQuery] string? lang = null)
         {
+            if (string.IsNullOrEmpty(paymentMethodId))
+                paymentMethodId = implicitPaymentMethodId;
             var model = await GetInvoiceModel(invoiceId, paymentMethodId == null ? null : PaymentMethodId.Parse(paymentMethodId), lang);
             if (model == null)
                 return NotFound();
@@ -847,7 +857,7 @@ namespace BTCPayServer.Controllers
                 TempData.SetStatusMessageModel(new StatusMessageModel()
                 {
                     Severity = StatusMessageModel.StatusSeverity.Error,
-                    Html = $"To create an invoice, you need to <a href='{Url.Action(nameof(StoresController.UpdateStore), "Stores", new { storeId = store.Id })}' class='alert-link'>set up your wallet</a> first",
+                    Html = $"To create an invoice, you need to <a href='{Url.Action(nameof(StoresController.PaymentMethods), "Stores", new { storeId = store.Id })}' class='alert-link'>set up your wallet</a> first",
                     AllowDismiss = false
                 });
                 return View(model);

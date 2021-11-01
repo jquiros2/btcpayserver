@@ -56,8 +56,11 @@ namespace BTCPayServer.Controllers.GreenField
             [FromQuery] 
             [ModelBinder(typeof(ModelBinders.DateTimeOffsetModelBinder))]
             DateTimeOffset? endDate = null,
-            string textSearch = null,
-            [FromQuery] bool includeArchived = false)
+            [FromQuery] string textSearch = null,
+            [FromQuery] bool includeArchived = false,
+            [FromQuery] int? skip = null,
+            [FromQuery] int? take = null
+            )
         {
             var store = HttpContext.GetStoreData();
             if (store == null)
@@ -77,6 +80,8 @@ namespace BTCPayServer.Controllers.GreenField
             var invoices =
                 await _invoiceRepository.GetInvoices(new InvoiceQuery()
                 {
+                    Skip = skip,
+                    Take = take,
                     StoreId = new[] {store.Id},
                     IncludeArchived = includeArchived,
                     StartDate = startDate,

@@ -9,9 +9,10 @@
     Layout = "../Shared/_NavLayout.cshtml";
     ViewData["NavPartialName"] = "../Stores/_Nav";
     ViewData.SetActivePageAndTitle(StoreNavPages.Payouts, $"Manage payouts{(string.IsNullOrEmpty(Model.PullPaymentName) ? string.Empty : " for pull payment " + Model.PullPaymentName)}", Context.GetStoreData().StoreName);
-    
-    var paymentMethods = PayoutHandlers.GetSupportedPaymentMethods();
-    
+    Model.PaginationQuery ??= new Dictionary<string, object>();
+    Model.PaginationQuery.Add("pullPaymentId", Model.PullPaymentId);
+    Model.PaginationQuery.Add("paymentMethodId", Model.PaymentMethodId);
+    Model.PaginationQuery.Add("payoutState", Model.PayoutState);
     var stateActions = new List<(string Action, string Text)>();
     if (PaymentMethodId.TryParse(Model.PaymentMethodId, out var paymentMethodId))
     {
@@ -54,9 +55,9 @@
     <h4 class="mb-4">@ViewData["Title"]</h4>
 
     <div class="row">
-        <div class="col-auto">
+        <div class="col-12">
             <ul class="nav nav-pills  bg-tile mb-2" style="border-radius:4px; border: 1px solid var(--btcpay-body-border-medium)">
-                @foreach (var state in paymentMethods)
+                @foreach (var state in Model.PaymentMethods)
                 {
                     <li class="nav-item py-0">
                         <a asp-action="Payouts" asp-route-storeId="@Context.GetRouteValue("storeId")"
@@ -71,7 +72,7 @@
                     </li>
                 }
             </ul>
-            <ul class="nav nav-pills  bg-tile" style="border: 1px solid var(--btcpay-body-border-medium)">
+            <ul class="nav nav-pills  bg-tile mb-2" style="border: 1px solid var(--btcpay-body-border-medium)">
                 @foreach (var state in Model.PayoutStateCount)
                 {
                     <li class="nav-item py-0">
@@ -89,17 +90,20 @@
         </div>
         @if (Model.Payouts.Any() && stateActions.Any())
         {
-            <div class="dropdown col-auto mt-4 ms-xl-auto mt-xl-0">
-                <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" id="@Model.PayoutState-actions">
-                    Actions
-                </button>
-                <div class="dropdown-menu" aria-labelledby="@Model.PayoutState-actions">
-                    @foreach (var action in stateActions)
-                    {
-                        <button type="submit" id="@Model.PayoutState-@action.Action" name="Command" class="dropdown-item" role="button" value="@Model.PayoutState-@action.Action">@action.Text</button>
-                    }
-                </div>
+            <div class="col-12">
+                <div class="dropdown  mt-4 ms-xl-auto mt-xl-0">
+                                <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" id="@Model.PayoutState-actions">
+                                    Actions
+                                </button>
+                                <div class="dropdown-menu" aria-labelledby="@Model.PayoutState-actions">
+                                    @foreach (var action in stateActions)
+                                    {
+                                        <button type="submit" id="@Model.PayoutState-@action.Action" name="Command" class="dropdown-item" role="button" value="@Model.PayoutState-@action.Action">@action.Text</button>
+                                    }
+                                </div>
+                            </div>
             </div>
+            
         }
     </div>
 

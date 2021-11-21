@@ -150,6 +150,15 @@ namespace BTCPayServer.Tests
             modify(walletSettings);
             storeController.UpdateWalletSettings(walletSettings).GetAwaiter().GetResult();
         }
+        
+        public async Task ModifyOnchainPaymentSettings(Action<WalletSettingsViewModel> modify)
+        {
+            var storeController = GetController<StoresController>();
+            var response = await storeController.WalletSettings(StoreId, "BTC");
+            WalletSettingsViewModel walletSettings = (WalletSettingsViewModel)((ViewResult)response).Model;
+            modify(walletSettings);
+            storeController.UpdatePaymentSettings(walletSettings).GetAwaiter().GetResult();
+        }
 
         public T GetController<T>(bool setImplicitStore = true) where T : Controller
         {
@@ -215,6 +224,17 @@ namespace BTCPayServer.Tests
                 IsAdmin = isAdmin
             };
             await account.Register(RegisterDetails);
+
+            //this addresses an obscure issue where LockSubscription is unintentionally set to "true",
+            //resulting in a large number of tests failing.  
+            if (account.RegisteredUserId == null) 
+            {
+                var settings = parent.PayTester.GetService<SettingsRepository>();
+                var policies = await settings.GetSettingAsync<PoliciesSettings>() ?? new PoliciesSettings();
+                policies.LockSubscription = false;
+                await account.Register(RegisterDetails);
+            }
+
             UserId = account.RegisteredUserId;
             IsAdmin = account.RegisteredAdmin;
         }

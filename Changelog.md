@@ -1,5 +1,77 @@
 # Changelog
 
+## 1.3.6
+
+### Improvements:
+
+* Fix breaking changes of LND API 0.14 @NicolasDorier
+
+## 1.3.5
+
+### Bug fixes:
+
+* Fix: Checkout page of for invoices of 0 amount shouldn't crash, but 404 @NicolasDorier
+* Swagger doc: Fix type of property cryptoCode (#3088) @ndeet
+* Fix bug with fraction amount display in crowdfund app (#3098) @bolatovumar
+* Swagger doc: Update Swagger docs for webhook event types (#3104) @bolatovumar
+* Payout/pull payment page would crash if no payment method are set on the store @satwo
+
+### Improvements:
+
+* Add crypto code for invoice and pull payment payout API response (#3099) @bolatovumar
+* Prevent creation of on-chain invoices below the dust limit (#3082) @satwo
+
+
+## 1.3.4
+
+### Bug fixes:
+
+* Fix: Do not crash when redirect url is not provided to Authorize page @Kukks
+* Fix: Disabling lightning should also disable LNURL @Kukks
+* Fix: Paging in payouts did not take additional parameters in consideration @Kukks
+* Fix: Payout actions button was misaligned @Kukks
+* Fix: Amount validation for payout creation min amount was missing @Kukks
+
+### Improvements:
+
+* Point of Sale Print view improvements (#3050) @satwo @dennisreimann
+* Upgrade to Bootstrap 5.1.3 @dennisreimann
+* Updates display names (#3036) @dstrukt
+
+## 1.3.3
+
+### Bug fixes:
+
+* LNAddress wasn't working if the store supported an altcoin @NicolasDorier
+* Fix maintainance view @dennisreimann
+
+## 1.3.2
+
+This feature include a critical security patch. The vulnerability impacts owner of shared instances which share their internal lightning nodes. Credits to @yilakb to have noticed us.
+
+### New Features:
+
+* Greenfield: Adds the Archive status to Invoice model @TheHazeEffect
+* Greenfield: Add pagination to the get invoices operation @TheHazeEffect
+
+### Bug fixes:
+
+* Crowdfunding topup invoice doesn't work when there isn't a perk added (#3048 #3064) @satwo
+* Crowdfund: Fix perk value display (#3060) @dennisreimann
+* Lightning address payment would fail if millisatoshi is not 0 mod 1000 on LND (#3056) @NicolasDorier
+* The Test Connection feature during lightning setup was hidding cause of failure @NicolasDorier
+* Creating a new invoice in payment request with LNURL activated would crash @NicolasDorier
+* Improve error reporting in (#3065) @NicolasDorier
+* After loading the Update PoS Settings page and selecting an item to edit, it will always show the price type selected as Fixed regardless of what the actual price type is. (#3049) @fabu21
+* Fixes label on Point of Sale page (#3037) @dstrukt
+
+### Improvements:
+
+* If no default payment method, the fallback should be in order of preference: BTC, then Lightning (via BOLT11)
+* UI Improvement of the maintenance page @dstrukt
+* In the invoice's details page, show the url of webhook's deliveries (#3034) @satwo
+* Improves upload button for files  (#3044) @dstrukt
+
 ## 1.3.1
 
 ### Bug fixes:

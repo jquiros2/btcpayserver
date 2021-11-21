@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using BTCPayServer.Client.Models;
+using BTCPayServer.Controllers;
 using BTCPayServer.Data;
 using BTCPayServer.Models.AppViewModels;
 using BTCPayServer.Payments;
@@ -80,7 +81,6 @@ namespace BTCPayServer.Services.Apps
                             nextResetDate = lastResetDate.Value.AddDays(settings.ResetEveryAmount);
                             break;
                         case CrowdfundResetEvery.Month:
-
                             nextResetDate = lastResetDate.Value.AddMonths(settings.ResetEveryAmount);
                             break;
                         case CrowdfundResetEvery.Year:
@@ -107,10 +107,16 @@ namespace BTCPayServer.Services.Apps
             if (settings.DisplayPerksValue)
             {
                 perkValue = paidInvoices
-                    .Where(entity => !string.IsNullOrEmpty(entity.Metadata.ItemCode))
+                    .Where(entity => entity.Currency.Equals(settings.TargetCurrency, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(entity.Metadata.ItemCode))
                     .GroupBy(entity => entity.Metadata.ItemCode)
                     .ToDictionary(entities => entities.Key, entities => 
-                        entities.Sum(entity => entity.GetPayments(true).Sum(payment => payment.GetCryptoPaymentData().GetValue())));
+                        entities.Sum(entity => entity.GetPayments(true).Sum(pay =>
+                        {
+                            var paymentMethodId = pay.GetPaymentMethodId();
+                            var value = pay.GetCryptoPaymentData().GetValue() - pay.NetworkFee;
+                            var rate = entity.GetPaymentMethod(paymentMethodId).Rate;
+                            return rate * value;
+                        })));
             }
             var perks = Parse(settings.PerksTemplate, settings.TargetCurrency);
             if (settings.SortPerksByPopularity)
@@ -227,7 +233,7 @@ namespace BTCPayServer.Services.Apps
         {
             using (var ctx = _ContextFactory.CreateContext())
             {
-                return await ctx.UserStore
+                var listApps = await ctx.UserStore
                     .Where(us =>
                         (allowNoUser && string.IsNullOrEmpty(userId) || us.ApplicationUserId == userId) &&
                         (storeId == null || us.StoreDataId == storeId))
@@ -243,7 +249,38 @@ namespace BTCPayServer.Services.Apps
                                 Id = app.Id
                             })
                     .ToArrayAsync();
+                
+                foreach (ListAppsViewModel.ListAppViewModel app in listApps)
+                {
+                    app.ViewStyle = await GetAppViewStyleAsync(app.Id, app.AppType);
+                }
+        
+                return listApps;
             }
+        }
+        
+        public async Task<string> GetAppViewStyleAsync(string appId, string appType)
+        {
+            AppType appTypeEnum = Enum.Parse<AppType>(appType);
+            AppData appData = await GetApp(appId, appTypeEnum, false);
+            var settings = appData.GetSettings<AppsController.PointOfSaleSettings>();
+
+            string style;
+            switch (appTypeEnum)
+            {
+                case AppType.PointOfSale:
+                    string posViewStyle = (settings.EnableShoppingCart ? PosViewType.Cart : settings.DefaultView).ToString();
+                    style = typeof(PosViewType).DisplayName(posViewStyle);
+                    break;
+                case AppType.Crowdfund:
+                    style = string.Empty;
+                    break;
+                default:
+                    style = string.Empty;
+                    break;
+            }
+
+            return style;
         }
 
         public async Task<List<AppData>> GetApps(string[] appIds, bool includeStore = false)
@@ -419,7 +456,7 @@ namespace BTCPayServer.Services.Apps
                     if (p.ExceptionStatus == InvoiceExceptionStatus.Marked &&
                         p.Status == InvoiceStatusLegacy.Invalid)
                         return new[] { contribution };
-
+                    
 
                     // Else, we just sum the payments
                     return payments

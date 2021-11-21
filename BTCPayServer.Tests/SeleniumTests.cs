@@ -221,7 +221,6 @@ namespace BTCPayServer.Tests
 
                 //let's test delete user quickly while we're at it 
                 s.GoToProfile();
-                s.Driver.FindElement(By.Id("danger-zone-expander")).Click();
                 s.Driver.FindElement(By.Id("delete-user")).Click();
                 s.Driver.WaitForElement(By.Id("ConfirmInput")).SendKeys("DELETE");
                 s.Driver.FindElement(By.Id("ConfirmContinue")).Click();
@@ -493,7 +492,7 @@ namespace BTCPayServer.Tests
                 var client = new NBitpayClient.Bitpay(new Key(), s.ServerUri);
                 await client.AuthorizeClient(new NBitpayClient.PairingCode(pairingCode));
                 await client.CreateInvoiceAsync(
-                    new NBitpayClient.Invoice() { Price = 0.000000012m, Currency = "USD", FullNotifications = true },
+                    new NBitpayClient.Invoice() { Price = 1.000000012m, Currency = "USD", FullNotifications = true },
                     NBitpayClient.Facade.Merchant);
 
                 client = new NBitpayClient.Bitpay(new Key(), s.ServerUri);
@@ -503,7 +502,7 @@ namespace BTCPayServer.Tests
                 s.Driver.FindElement(By.Id("ApprovePairing")).Click();
 
                 await client.CreateInvoiceAsync(
-                    new NBitpayClient.Invoice() { Price = 0.000000012m, Currency = "USD", FullNotifications = true },
+                    new NBitpayClient.Invoice() { Price = 1.000000012m, Currency = "USD", FullNotifications = true },
                     NBitpayClient.Facade.Merchant);
 
                 s.Driver.Navigate().GoToUrl(s.Link("/api-tokens"));
@@ -811,10 +810,10 @@ namespace BTCPayServer.Tests
                 s.RegisterNewUser(true);
                 foreach (var isHotwallet in new[] { false, true })
                 {
-                    var (storeName, storeId) = s.CreateNewStore();
-                    s.GenerateWallet(privkeys: isHotwallet,
-                        seed: "melody lizard phrase voice unique car opinion merge degree evil swift cargo");
-                    s.GoToWallet(s.WalletId, WalletsNavPages.Settings);
+                    var cryptoCode = "BTC";
+                    var (_, storeId) = s.CreateNewStore();
+                    s.GenerateWallet(cryptoCode, "melody lizard phrase voice unique car opinion merge degree evil swift cargo", privkeys: isHotwallet);
+                    s.GoToWalletSettings(storeId, cryptoCode);
                     if (isHotwallet)
                         Assert.Contains("View seed", s.Driver.PageSource);
                     else
@@ -831,10 +830,11 @@ namespace BTCPayServer.Tests
                 await s.StartAsync();
                 s.RegisterNewUser(true);
                 var (storeName, storeId) = s.CreateNewStore();
+                var cryptoCode = "BTC";
 
                 // In this test, we try to spend from a manual seed. We import the xpub 49'/0'/0',
                 // then try to use the seed to sign the transaction
-                s.GenerateWallet("BTC", "", true);
+                s.GenerateWallet(cryptoCode, "", true);
 
                 //let's test quickly the receive wallet page
                 s.Driver.FindElement(By.Id("Wallets")).Click();
@@ -872,7 +872,7 @@ namespace BTCPayServer.Tests
 
                 //change the wallet and ensure old address is not there and generating a new one does not result in the prev one
                 s.GoToStore(storeId);
-                s.GenerateWallet("BTC", "", true);
+                s.GenerateWallet(cryptoCode, "", true);
                 s.Driver.FindElement(By.Id("Wallets")).Click();
                 s.Driver.FindElement(By.LinkText("Manage")).Click();
                 s.Driver.FindElement(By.Id("WalletReceive")).Click();
@@ -889,7 +889,7 @@ namespace BTCPayServer.Tests
                     await s.Server.ExplorerNode.GetAddressInfoAsync(BitcoinAddress.Create(address, Network.RegTest));
                 Assert.True(result.IsWatchOnly);
                 s.GoToStore(storeId);
-                var mnemonic = s.GenerateWallet("BTC", "", true, true);
+                var mnemonic = s.GenerateWallet(cryptoCode, "", true, true);
 
                 //lets import and save private keys
                 var root = mnemonic.DeriveExtKey();
@@ -906,23 +906,22 @@ namespace BTCPayServer.Tests
 
                 s.Driver.FindElement(By.Id("Wallets")).Click();
                 s.Driver.FindElement(By.LinkText("Manage")).Click();
-
                 s.ClickOnAllSideMenus();
 
                 // Make sure wallet info is correct
-                s.Driver.FindElement(By.Id("WalletSettings")).Click();
+                s.GoToWalletSettings(storeId, cryptoCode);
                 Assert.Contains(mnemonic.DeriveExtKey().GetPublicKey().GetHDFingerPrint().ToString(),
                     s.Driver.FindElement(By.Id("AccountKeys_0__MasterFingerprint")).GetAttribute("value"));
                 Assert.Contains("m/84'/1'/0'",
                     s.Driver.FindElement(By.Id("AccountKeys_0__AccountKeyPath")).GetAttribute("value"));
-
+                
+                s.Driver.FindElement(By.Id("Wallets")).Click();
+                s.Driver.FindElement(By.LinkText("Manage")).Click();
+                
                 // Make sure we can rescan, because we are admin!
                 s.Driver.FindElement(By.Id("WalletRescan")).Click();
                 Assert.Contains("The batch size make sure", s.Driver.PageSource);
-
-                // We setup the fingerprint and the account key path
-                s.Driver.FindElement(By.Id("WalletSettings")).Click();
-
+                
                 // Check the tx sent earlier arrived
                 s.Driver.FindElement(By.Id("WalletTransactions")).Click();
 
@@ -971,10 +970,10 @@ namespace BTCPayServer.Tests
                 Assert.Equal(parsedBip21.Address.ToString(),
                     s.Driver.FindElement(By.Id("Outputs_0__DestinationAddress")).GetAttribute("value"));
 
-                s.GoToWallet(new WalletId(storeId, "BTC"), WalletsNavPages.Settings);
-                var walletUrl = s.Driver.Url;
-                s.Driver.FindElement(By.Id("OtherActionsDropdownToggle")).Click();
-                s.Driver.FindElement(By.CssSelector("button[value=view-seed]")).Click();
+                s.GoToWalletSettings(storeId, cryptoCode);
+                var settingsUrl = s.Driver.Url;
+                s.Driver.FindElement(By.Id("ActionsDropdownToggle")).Click();
+                s.Driver.FindElement(By.Id("ViewSeed")).Click();
 
                 // Seed backup page
                 var recoveryPhrase = s.Driver.FindElements(By.Id("RecoveryPhrase")).First()
@@ -986,7 +985,7 @@ namespace BTCPayServer.Tests
                 // No confirmation, just a link to return to the wallet
                 Assert.Empty(s.Driver.FindElements(By.Id("confirm")));
                 s.Driver.FindElement(By.Id("proceed")).Click();
-                Assert.Equal(walletUrl, s.Driver.Url);
+                Assert.Equal(settingsUrl, s.Driver.Url);
             }
         }
 
@@ -997,12 +996,12 @@ namespace BTCPayServer.Tests
             {
                 await s.StartAsync();
                 s.RegisterNewUser(true);
-                var (_, storeId) = s.CreateNewStore();
-                var mnemonic = s.GenerateWallet("BTC",
-                    "click chunk owner kingdom faint steak safe evidence bicycle repeat bulb wheel");
+                (string _, string storeId) = s.CreateNewStore();
+                var cryptoCode = "BTC";
+                var mnemonic = s.GenerateWallet(cryptoCode, "click chunk owner kingdom faint steak safe evidence bicycle repeat bulb wheel");
 
                 // Make sure wallet info is correct
-                s.GoToWallet(new WalletId(storeId, "BTC"), WalletsNavPages.Settings);
+                s.GoToWalletSettings(storeId, cryptoCode);
                 Assert.Contains(mnemonic.DeriveExtKey().GetPublicKey().GetHDFingerPrint().ToString(),
                     s.Driver.FindElement(By.Id("AccountKeys_0__MasterFingerprint")).GetAttribute("value"));
                 Assert.Contains("m/84'/1'/0'",
@@ -1029,7 +1028,6 @@ namespace BTCPayServer.Tests
             s.Driver.FindElement(By.Id("Name")).SendKeys("PP1");
             s.Driver.FindElement(By.Id("Amount")).Clear();
             s.Driver.FindElement(By.Id("Amount")).SendKeys("99.0");
-            ;
             s.Driver.FindElement(By.Id("Create")).Click();
             s.Driver.FindElement(By.LinkText("View")).Click();
 
@@ -1179,7 +1177,7 @@ namespace BTCPayServer.Tests
 
             s.Driver.FindElement(By.Id("NewPullPayment")).Click();
 
-            var paymentMethodOptions = s.Driver.FindElements(By.CssSelector("#PaymentMethods option"));
+            var paymentMethodOptions = s.Driver.FindElements(By.CssSelector("input[name='PaymentMethods']"));
             Assert.Equal(2, paymentMethodOptions.Count);
             
             s.Driver.FindElement(By.Id("Name")).SendKeys("Lightning Test");
@@ -1267,11 +1265,12 @@ namespace BTCPayServer.Tests
             await s.Server.EnsureChannelsSetup();
 
             s.RegisterNewUser(true);
-            var store = s.CreateNewStore();
-            var network = s.Server.NetworkProvider.GetNetwork<BTCPayNetwork>("BTC").NBitcoinNetwork;
-            s.GoToStore(store.storeId);
-            s.AddLightningNode("BTC", LightningConnectionType.CLightning, false);
-            s.Driver.FindElement(By.Id($"Modify-LightningBTC")).Click();
+            var cryptoCode = "BTC";
+            (_, string storeId) = s.CreateNewStore();
+            var network = s.Server.NetworkProvider.GetNetwork<BTCPayNetwork>(cryptoCode).NBitcoinNetwork;
+            s.GoToStore(storeId);
+            s.AddLightningNode(cryptoCode, LightningConnectionType.CLightning, false);
+            s.GoToLightningSettings(storeId, cryptoCode);
             s.Driver.SetCheckbox(By.Id("LNURLEnabled"), true);
             s.GoToApps();
             s.Driver.FindElement(By.Id("CreateNewApp")).Click();
@@ -1312,11 +1311,11 @@ namespace BTCPayServer.Tests
                 new[] { s.Server.MerchantLightningD },
                 new[] { s.Server.MerchantLnd.Client });
             s.RegisterNewUser(true);
-            var store = s.CreateNewStore();
+            (string storeName, string storeId) = s.CreateNewStore();
             var network = s.Server.NetworkProvider.GetNetwork<BTCPayNetwork>(cryptoCode).NBitcoinNetwork;
-            s.GoToStore(store.storeId);
+            s.GoToStore(storeId);
             s.AddLightningNode(cryptoCode, LightningConnectionType.CLightning);
-            s.Driver.FindElement(By.Id($"Modify-Lightning{cryptoCode}")).Click();
+            s.GoToLightningSettings(storeId, cryptoCode);
             // LNURL is false by default
             Assert.False(s.Driver.FindElement(By.Id("LNURLEnabled")).Selected);
             // LNURL settings are not expanded when LNURL is disabled
@@ -1326,7 +1325,7 @@ namespace BTCPayServer.Tests
             Assert.Contains($"{cryptoCode} Lightning settings successfully updated", s.FindAlertMessage().Text);
             
             // Topup Invoice test
-            var i = s.CreateInvoice(store.storeName, null, cryptoCode);
+            var i = s.CreateInvoice(storeName, null, cryptoCode);
             s.GoToInvoiceCheckout(i);
             s.Driver.FindElement(By.Id("copy-tab")).Click();
             var lnurl = s.Driver.FindElement(By.CssSelector("input.checkoutTextbox")).GetAttribute("value");
@@ -1359,7 +1358,7 @@ namespace BTCPayServer.Tests
 
             // Standard invoice test
             s.GoToHome();
-            i = s.CreateInvoice(store.storeName, 0.0000001m, cryptoCode);
+            i = s.CreateInvoice(storeName, 0.0000001m, cryptoCode);
             s.GoToInvoiceCheckout(i);
             s.Driver.FindElement(By.ClassName("payment__currencies")).Click();
             // BOLT11 is also available for standard invoices
@@ -1392,11 +1391,8 @@ namespace BTCPayServer.Tests
             await s.Server.CustomerLightningD.Pay(lnurlResponse.Pr);
             Assert.Equal(new LightMoney(0.0000001m, LightMoneyUnit.BTC),
                 lnurlResponse2.GetPaymentRequest(network).MinimumAmount);
-
-
-
-            s.GoToStore(s.StoreId);
-            s.Driver.FindElement(By.Id($"Modify-Lightning{cryptoCode}")).Click();
+            
+            s.GoToLightningSettings(s.StoreId, cryptoCode);
             // LNURL is enabled and settings are expanded
             Assert.True(s.Driver.FindElement(By.Id("LNURLEnabled")).Selected);
             Assert.Contains("show", s.Driver.FindElement(By.Id("LNURLSettings")).GetAttribute("class"));
@@ -1404,17 +1400,16 @@ namespace BTCPayServer.Tests
             s.Driver.FindElement(By.Id("save")).Click();
             Assert.Contains($"{cryptoCode} Lightning settings successfully updated", s.FindAlertMessage().Text);
             
-            i = s.CreateInvoice(store.storeName, 0.000001m, cryptoCode);
+            i = s.CreateInvoice(storeName, 0.000001m, cryptoCode);
             s.GoToInvoiceCheckout(i);
             s.Driver.FindElement(By.ClassName("payment__currencies_noborder"));
 
             s.GoToHome();
-            i = s.CreateInvoice(store.storeName, null, cryptoCode);
+            i = s.CreateInvoice(storeName, null, cryptoCode);
             s.GoToInvoiceCheckout(i);
             s.Driver.FindElement(By.ClassName("payment__currencies_noborder"));
 
-            s.GoToStore(s.StoreId);
-            s.Driver.FindElement(By.Id($"Modify-Lightning{cryptoCode}")).Click();
+            s.GoToLightningSettings(s.StoreId, cryptoCode);
             s.Driver.SetCheckbox(By.Id("LNURLBech32Mode"), false);
             s.Driver.SetCheckbox(By.Id("LNURLStandardInvoiceEnabled"), false);
             s.Driver.SetCheckbox(By.Id("DisableBolt11PaymentMethod"), true);
@@ -1422,16 +1417,16 @@ namespace BTCPayServer.Tests
             Assert.Contains($"{cryptoCode} Lightning settings successfully updated", s.FindAlertMessage().Text);
             
             // Ensure the toggles are set correctly
-            s.Driver.FindElement(By.Id($"Modify-Lightning{cryptoCode}")).Click();
+            s.GoToLightningSettings(s.StoreId, cryptoCode);
 
             //TODO: DisableBolt11PaymentMethod is actually disabled because LNURLStandardInvoiceEnabled is disabled
             // checkboxes is not good choice here, in next release we should have multi choice instead
             Assert.False(s.Driver.FindElement(By.Id("DisableBolt11PaymentMethod")).Selected);
             Assert.False(s.Driver.FindElement(By.Id("LNURLStandardInvoiceEnabled")).Selected);
             Assert.False(s.Driver.FindElement(By.Id("LNURLBech32Mode")).Selected);
-            s.CreateInvoice(store.storeName, 0.0000001m, cryptoCode,"",null, expectedSeverity: StatusMessageModel.StatusSeverity.Error);
+            s.CreateInvoice(storeName, 0.0000001m, cryptoCode,"",null, expectedSeverity: StatusMessageModel.StatusSeverity.Error);
 
-            i = s.CreateInvoice(store.storeName, null, cryptoCode);
+            i = s.CreateInvoice(storeName, null, cryptoCode);
             s.GoToInvoiceCheckout(i);
             s.Driver.FindElement(By.ClassName("payment__currencies_noborder"));
             s.Driver.FindElement(By.Id("copy-tab")).Click();
@@ -1442,7 +1437,7 @@ namespace BTCPayServer.Tests
             s.GoToHome();
             var newStore = s.CreateNewStore(false);
             s.AddLightningNode(cryptoCode, LightningConnectionType.LndREST, false);
-            s.Driver.FindElement(By.Id($"Modify-Lightning{cryptoCode}")).Click();
+            s.GoToLightningSettings(newStore.storeId, cryptoCode);
             s.Driver.SetCheckbox(By.Id("LNURLEnabled"), true);
             s.Driver.SetCheckbox(By.Id("DisableBolt11PaymentMethod"), true);
             s.Driver.FindElement(By.Id("save")).Click();
@@ -1456,11 +1451,10 @@ namespace BTCPayServer.Tests
             // Check that pull payment has lightning option
             s.GoToStore(s.StoreId, StoreNavPages.PullPayments);
             s.Driver.FindElement(By.Id("NewPullPayment")).Click();
-            Assert.Equal(new PaymentMethodId(cryptoCode, PaymentTypes.LightningLike),PaymentMethodId.Parse(Assert.Single(s.Driver.FindElement(By.Id("PaymentMethods")).FindElements(By.TagName("option"))).GetAttribute("value")));
+            Assert.Equal(new PaymentMethodId(cryptoCode, PaymentTypes.LightningLike),PaymentMethodId.Parse(Assert.Single(s.Driver.FindElements(By.CssSelector("input[name='PaymentMethods']"))).GetAttribute("value")));
             s.Driver.FindElement(By.Id("Name")).SendKeys("PP1");
             s.Driver.FindElement(By.Id("Amount")).Clear();
             s.Driver.FindElement(By.Id("Amount")).SendKeys("0.0000001");
-            ;
             s.Driver.FindElement(By.Id("Create")).Click();
             s.Driver.FindElement(By.LinkText("View")).Click();
             s.Driver.FindElement(By.Id("Destination")).SendKeys(lnurl);
@@ -1502,23 +1496,27 @@ namespace BTCPayServer.Tests
             using var s = SeleniumTester.Create();
             s.Server.ActivateLightning();
             await s.StartAsync();
-
             await s.Server.EnsureChannelsSetup();
+            var cryptoCode = "BTC";
             s.RegisterNewUser(true);
             //ln address tests
-            var store = s.CreateNewStore();
+            s.CreateNewStore();
+            s.GoToStore(s.StoreId, StoreNavPages.Integrations);
+            //ensure ln address is not available as Lightning is not enable
+            s.Driver.FindElement(By.Id("lightning-address-option"))
+                .FindElement(By.LinkText("You need to setup Lightning first"));
+
+            s.GoToStore(s.StoreId);
+            s.AddLightningNode("BTC", LightningConnectionType.LndREST, false);
             s.GoToStore(s.StoreId, StoreNavPages.Integrations);
             //ensure ln address is not available as lnurl is not configured
             s.Driver.FindElement(By.Id("lightning-address-option"))
-                .FindElement(By.ClassName("btcpay-status--disabled"));
-
-            s.GoToStore(s.StoreId, StoreNavPages.PaymentMethods);
-            s.AddLightningNode("BTC", LightningConnectionType.LndREST, false);
-
-            s.Driver.FindElement(By.Id($"Modify-LightningBTC")).Click();
+                .FindElement(By.LinkText("You need LNURL configured first"));
+            
+            s.GoToLightningSettings(s.StoreId, cryptoCode);
             s.Driver.SetCheckbox(By.Id("LNURLEnabled"), true);
             s.Driver.WaitForAndClick(By.Id("save"));
-            Assert.Contains($"BTC Lightning settings successfully updated", s.FindAlertMessage().Text);
+            Assert.Contains($"{cryptoCode} Lightning settings successfully updated", s.FindAlertMessage().Text);
             
             s.GoToStore(s.StoreId, StoreNavPages.Integrations);
             s.Driver.FindElement(By.Id("lightning-address-option"))
@@ -1573,7 +1571,6 @@ namespace BTCPayServer.Tests
                 }
             }
         }
-
 
         private static void CanBrowseContent(SeleniumTester s)
         {

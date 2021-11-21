@@ -4,7 +4,7 @@
 @model ManageController.AddApiKeyViewModel
 
 @{
-    ViewData.SetActivePageAndTitle(ManageNavPages.APIKeys, "Add API Key");
+    ViewData.SetActivePageAndTitle(ManageNavPages.APIKeys, "Generate API Key");
 }
 
 @section PageHeadContent {
@@ -26,7 +26,7 @@
     </script>
 }
 
-<h2 class="mb-4">@ViewData["PageTitle"]</h2>
+<h2 class="mb-3">@ViewData["PageTitle"]</h2>
 
 <p>Generate a new api key to use BTCPay through its API.</p>
 
@@ -39,7 +39,7 @@
         <span asp-validation-for="Label" class="text-danger"></span>
     </div>
 
-    <h5 class="mt-5 mb-3">Permissions</h5>
+    <h5 class="mt-4 mb-3">Permissions</h5>
     <div class="list-group mb-4">
         @for (int i = 0; i < Model.PermissionValues.Count; i++)
         {

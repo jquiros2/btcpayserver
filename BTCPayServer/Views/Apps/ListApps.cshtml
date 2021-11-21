@@ -86,7 +86,15 @@
                                     }
                                 </td>
                                 <td>@app.AppName</td>
-                                <td>@typeof(AppType).DisplayName(app.AppType)</td>
+                                <td>
+                                    @typeof(AppType).DisplayName(app.AppType) 
+                                    @if (app.AppType != AppType.Crowdfund.ToString())
+                                    {
+                                        <span>-</span> 
+                                    }
+                                    
+                                    @app.ViewStyle
+                                </td>
                                 <td style="text-align:right">
                                     @if (app.IsOwner)
                                     {

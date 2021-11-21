@@ -5,8 +5,10 @@ using System.Linq;
 using System.Text;
 using BTCPayServer.Payments;
 using BTCPayServer.Services.Rates;
+using NBitcoin;
 using NBXplorer;
 using Newtonsoft.Json.Linq;
+using BTCPayServer.Payments.Lightning;
 
 namespace BTCPayServer.Data
 {
@@ -21,14 +23,18 @@ namespace BTCPayServer.Data
 
         public static PaymentMethodId[] GetEnabledPaymentIds(this StoreData storeData, BTCPayNetworkProvider networks)
         {
+            return GetEnabledPaymentMethods(storeData, networks).Select(method => method.PaymentId).ToArray();
+        }
+        
+        public static ISupportedPaymentMethod[] GetEnabledPaymentMethods(this StoreData storeData, BTCPayNetworkProvider networks)
+        {
             var excludeFilter = storeData.GetStoreBlob().GetExcludedPaymentMethods();
             var paymentMethodIds = storeData.GetSupportedPaymentMethods(networks)
-                                .Select(p => p.PaymentId)
-                                .Where(a => !excludeFilter.Match(a))
-                                .OrderByDescending(a => a.CryptoCode == "BTC")
-                                .ThenBy(a => a.CryptoCode)
-                                .ThenBy(a => a.PaymentType == PaymentTypes.LightningLike ? 1 : 0)
-                                .ToArray();
+                .Where(a => !excludeFilter.Match(a.PaymentId))
+                .OrderByDescending(a => a.PaymentId.CryptoCode == "BTC")
+                .ThenBy(a => a.PaymentId.CryptoCode)
+                .ThenBy(a => a.PaymentId.PaymentType == PaymentTypes.LightningLike ? 1 : 0)
+                .ToArray();
             return paymentMethodIds;
         }
 
@@ -141,6 +147,50 @@ namespace BTCPayServer.Data
                 strategies.Add(new JProperty(supportedPaymentMethod.PaymentId.ToString(), PaymentMethodExtensions.Serialize(supportedPaymentMethod)));
             storeData.DerivationStrategies = strategies.ToString();
 #pragma warning restore CS0618
+        }
+    
+        public static bool IsLightningEnabled(this StoreData storeData, BTCPayNetworkProvider networks)
+        {
+            var paymentMethods = storeData.GetSupportedPaymentMethods(networks);
+            var lightningByCryptoCode = paymentMethods
+                    .OfType<LightningSupportedPaymentMethod>()
+                    .Where(method => method.PaymentId.PaymentType == LightningPaymentType.Instance)
+                    .ToDictionary(c => c.CryptoCode.ToUpperInvariant());
+            var excludeFilters = storeData.GetStoreBlob().GetExcludedPaymentMethods();
+            var isLightningEnabled = false;
+            foreach (var paymentMethod in paymentMethods)
+            {
+                var paymentMethodId = paymentMethod.PaymentId;
+                switch (paymentMethodId.PaymentType)
+                {
+                    // LNURLPayPaymentType is a subclass of LightningPaymentType, skip it
+                    case LNURLPayPaymentType lnurlPayPaymentType:
+                        break;
+                    case LightningPaymentType _:
+                        var lightning = lightningByCryptoCode.TryGet(paymentMethodId.CryptoCode);
+                        isLightningEnabled = !excludeFilters.Match(paymentMethodId) && lightning != null;
+                        break;
+                }
+            }
+
+            return isLightningEnabled;
+        }
+
+        public static bool IsLNUrlEnabled(this StoreData storeData, BTCPayNetworkProvider networks)
+        {
+            var paymentMethods = storeData.GetSupportedPaymentMethods(networks);
+            var excludeFilters = storeData.GetStoreBlob().GetExcludedPaymentMethods();
+            var isLNUrlEnabled = false;
+            foreach (var paymentMethod in paymentMethods)
+            {
+                var paymentMethodId = paymentMethod.PaymentId;
+                if (paymentMethodId.PaymentType is LNURLPayPaymentType)
+                {
+                    isLNUrlEnabled = !excludeFilters.Match(paymentMethodId);
+                }
+            }
+
+            return isLNUrlEnabled;
         }
     }
 }

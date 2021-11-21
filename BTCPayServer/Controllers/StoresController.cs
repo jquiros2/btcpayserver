@@ -146,19 +146,6 @@ namespace BTCPayServer.Controllers
             }
         }
 
-        public bool TaprootActivated(string crytoCode)
-        {
-            var network = (BTCPayNetwork)_NetworkProvider.GetNetwork(crytoCode);
-#pragma warning disable CS0618
-            if (!(network.IsBTC && network.NBitcoinNetwork.ChainName == ChainName.Mainnet))
-                // Consider it activated for everything that is not mainnet bitcoin
-                return true;
-#pragma warning restore CS0618
-            var status = _Dashboard.Get(crytoCode).Status;
-            return  status.ChainHeight >= 709632;
-        }
-
-
         [HttpPost]
         [Route("{storeId}/users")]
         public async Task<IActionResult> StoreUsers(StoreUsersViewModel vm)
@@ -420,6 +407,12 @@ namespace BTCPayServer.Controllers
             var enabled = storeData.GetEnabledPaymentIds(_NetworkProvider);
             var defaultPaymentId = storeData.GetDefaultPaymentId();
             var defaultChoice = defaultPaymentId is PaymentMethodId ? defaultPaymentId.FindNearest(enabled) : null;
+            if (defaultChoice is null)
+            {
+                defaultChoice = enabled.FirstOrDefault(e => e.CryptoCode == "BTC" && e.PaymentType == PaymentTypes.BTCLike) ??
+                                enabled.FirstOrDefault(e => e.CryptoCode == "BTC" && e.PaymentType == PaymentTypes.LightningLike) ??
+                                enabled.FirstOrDefault();
+            }
             var choices = enabled
                 .Select(o =>
                     new CheckoutAppearanceViewModel.Format()

@@ -234,7 +234,7 @@ services:
       - "5432"
 
   merchant_lnd:
-    image: btcpayserver/lnd:v0.13.3-beta
+    image: btcpayserver/lnd:v0.14.0-beta
     restart: unless-stopped
     environment:
       LND_CHAIN: "btc"
@@ -268,7 +268,7 @@ services:
       - bitcoind
 
   customer_lnd:
-    image: btcpayserver/lnd:v0.13.3-beta
+    image: btcpayserver/lnd:v0.14.0-beta
     restart: unless-stopped
     environment:
       LND_CHAIN: "btc"
@@ -371,7 +371,10 @@ services:
               whitelist=0.0.0.0/0
               validatepegin=0
               initialfreecoins=210000000000000
-              con_dyna_deploy_start=99999999999
+              con_dyna_deploy_signal=1
+              con_dyna_deploy_start=0
+              con_nminerconfirmationwindow=1
+              con_nrulechangeactivationthreshold=1
       expose:
           - "19332"
           - "19444"

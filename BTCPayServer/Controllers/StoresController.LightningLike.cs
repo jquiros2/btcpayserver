@@ -112,7 +112,7 @@ namespace BTCPayServer.Controllers
                     var handler = _ServiceProvider.GetRequiredService<LightningLikePaymentHandler>();
                     try
                     {
-                        var info = await handler.GetNodeInfo(paymentMethod, network, new InvoiceLogs(), Request.IsOnion());
+                        var info = await handler.GetNodeInfo(paymentMethod, network, new InvoiceLogs(), Request.IsOnion(), true);
                         if (!vm.SkipPortTest)
                         {
                             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
@@ -260,6 +260,10 @@ namespace BTCPayServer.Controllers
             var paymentMethodId = new PaymentMethodId(network.CryptoCode, PaymentTypes.LightningLike);
             var storeBlob = store.GetStoreBlob();
             storeBlob.SetExcluded(paymentMethodId, !enabled);
+            if (!enabled)
+            {
+                storeBlob.SetExcluded(new PaymentMethodId(network.CryptoCode, PaymentTypes.LNURLPay), true);
+            }
             store.SetStoreBlob(storeBlob);
             await _Repo.UpdateStore(store);
             TempData[WellKnownTempData.SuccessMessage] = $"{network.CryptoCode} Lightning payments are now {(enabled ? "enabled" : "disabled")} for this store.";

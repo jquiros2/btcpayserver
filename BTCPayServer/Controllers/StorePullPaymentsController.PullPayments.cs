@@ -60,19 +60,28 @@ namespace BTCPayServer.Controllers
         }
         
         [HttpGet("new")]
-        public IActionResult NewPullPayment(string storeId)
+        public async Task<IActionResult> NewPullPayment(string storeId)
         {
             if (CurrentStore is  null)
                 return NotFound();
-            var storeMethods = CurrentStore.GetSupportedPaymentMethods(_btcPayNetworkProvider).Select(method => method.PaymentId).ToList();
-            var paymentMethodOptions = _payoutHandlers.GetSupportedPaymentMethods(storeMethods);
+
+            var paymentMethods = await _payoutHandlers.GetSupportedPaymentMethods(CurrentStore);
+            if (!paymentMethods.Any())
+            {
+                TempData.SetStatusMessageModel(new StatusMessageModel
+                {
+                    Message = "You must enable at least one payment method before creating a pull payment.",
+                    Severity = StatusMessageModel.StatusSeverity.Error
+                });
+                return RedirectToAction("PaymentMethods", "Stores", new { storeId });
+            }
             return View(new NewPullPaymentModel
             {
                 Name = "",
                 Currency = "BTC",
                 CustomCSSLink = "",
                 EmbeddedCSS = "",
-                PaymentMethodItems = paymentMethodOptions.Select(id => new SelectListItem(id.ToPrettyString(), id.ToString(), true))
+                PaymentMethodItems = paymentMethods.Select(id => new SelectListItem(id.ToPrettyString(), id.ToString(), true))
             });
         }
         
@@ -82,8 +91,7 @@ namespace BTCPayServer.Controllers
             if (CurrentStore is  null)
                 return NotFound();
 
-            var storeMethods = CurrentStore.GetSupportedPaymentMethods(_btcPayNetworkProvider).Select(method => method.PaymentId).ToList();
-            var paymentMethodOptions = _payoutHandlers.GetSupportedPaymentMethods(storeMethods);
+            var paymentMethodOptions = await _payoutHandlers.GetSupportedPaymentMethods(CurrentStore);
             model.PaymentMethodItems =
                 paymentMethodOptions.Select(id => new SelectListItem(id.ToPrettyString(), id.ToString(), true));
             model.Name ??= string.Empty;
@@ -230,6 +238,8 @@ namespace BTCPayServer.Controllers
         {
             if (vm is null)
                 return NotFound();
+            
+            vm.PaymentMethods = await _payoutHandlers.GetSupportedPaymentMethods(HttpContext.GetStoreData());
             var paymentMethodId = PaymentMethodId.Parse(vm.PaymentMethodId);
             var handler = _payoutHandlers
                 .FindPayoutHandler(paymentMethodId);
@@ -404,9 +414,21 @@ namespace BTCPayServer.Controllers
             string storeId, string pullPaymentId, string paymentMethodId, PayoutState payoutState,
             int skip = 0, int count = 50)
         {
+            var paymentMethods = await _payoutHandlers.GetSupportedPaymentMethods(HttpContext.GetStoreData());
+            if (!paymentMethods.Any())
+            {
+                TempData.SetStatusMessageModel(new StatusMessageModel
+                {
+                    Message = "You must enable at least one payment method before creating a payout.",
+                    Severity = StatusMessageModel.StatusSeverity.Error
+                });
+                return RedirectToAction("PaymentMethods", "Stores", new { storeId });
+            }
+
             var vm = this.ParseListQuery(new PayoutsModel
             {
-                PaymentMethodId = paymentMethodId?? _payoutHandlers.GetSupportedPaymentMethods().First().ToString(),
+                PaymentMethods = paymentMethods,
+                PaymentMethodId = paymentMethodId??paymentMethods.First().ToString(),
                 PullPaymentId = pullPaymentId, 
                 PayoutState =  payoutState,
                 Skip = skip,

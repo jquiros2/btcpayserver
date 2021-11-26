@@ -115,6 +115,7 @@ services:
       NBXPLORER_MAXGAPSIZE: 10
       NBXPLORER_VERBOSE: 1
       NBXPLORER_NOAUTH: 1
+      NBXPLORER_EXPOSERPC: 1
     links:
       - bitcoind
       - litecoind
@@ -234,7 +235,7 @@ services:
       - "5432"
 
   merchant_lnd:
-    image: btcpayserver/lnd:v0.14.0-beta
+    image: btcpayserver/lnd:v0.14.1-beta
     restart: unless-stopped
     environment:
       LND_CHAIN: "btc"
@@ -268,7 +269,7 @@ services:
       - bitcoind
 
   customer_lnd:
-    image: btcpayserver/lnd:v0.14.0-beta
+    image: btcpayserver/lnd:v0.14.1-beta
     restart: unless-stopped
     environment:
       LND_CHAIN: "btc"

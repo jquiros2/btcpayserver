@@ -31,6 +31,8 @@ namespace BTCPayServer.Hosting
 {
     public class MigrationStartupTask : IStartupTask
     {
+        public Logs Logs { get; }
+
         private readonly ApplicationDbContextFactory _DBContextFactory;
         private readonly StoreRepository _StoreRepository;
         private readonly BTCPayNetworkProvider _NetworkProvider;
@@ -51,8 +53,10 @@ namespace BTCPayServer.Hosting
             SettingsRepository settingsRepository,
             AppService appService, 
             IEnumerable<IPayoutHandler> payoutHandlers,
-            BTCPayNetworkJsonSerializerSettings btcPayNetworkJsonSerializerSettings)
+            BTCPayNetworkJsonSerializerSettings btcPayNetworkJsonSerializerSettings,
+            Logs logs)
         {
+            Logs = logs;
             _DBContextFactory = dbContextFactory;
             _StoreRepository = storeRepository;
             _NetworkProvider = networkProvider;
@@ -159,12 +163,28 @@ namespace BTCPayServer.Hosting
                     settings.MigratePayoutDestinationId = true;
                     await _Settings.UpdateSetting(settings);
                 }
+                if (!settings.AddInitialUserBlob)
+                {
+                    await AddInitialUserBlob();
+                    settings.AddInitialUserBlob = true;
+                    await _Settings.UpdateSetting(settings);
+                }
             }
             catch (Exception ex)
             {
                 Logs.PayServer.LogError(ex, "Error on the MigrationStartupTask");
                 throw;
             }
+        }
+        
+        private async Task AddInitialUserBlob()
+        {
+            await using var ctx = _DBContextFactory.CreateContext();
+            foreach (var user in await ctx.Users.AsQueryable().ToArrayAsync())
+            {
+                user.SetBlob(new UserBlob() { ShowInvoiceStatusChangeHint = true });
+            }
+            await ctx.SaveChangesAsync();
         }
         
         private async Task MigratePayoutDestinationId()

@@ -18,21 +18,19 @@ using Xunit.Abstractions;
 
 namespace BTCPayServer.Tests
 {
-    public class ElementsTests
+    public class ElementsTests : UnitTestBase
     {
 
         public const int TestTimeout = 60_000;
-        public ElementsTests(ITestOutputHelper helper)
+        public ElementsTests(ITestOutputHelper helper) : base(helper)
         {
-            Logs.Tester = new XUnitLog(helper) { Name = "Tests" };
-            Logs.LogProvider = new XUnitLogProvider(helper);
         }
 
         [Fact]
         [Trait("Altcoins", "Altcoins")]
         public async Task OnlyShowSupportedWallets()
         {
-            using (var tester = ServerTester.Create())
+            using (var tester = CreateServerTester())
             {
                 tester.ActivateLBTC();
                 await tester.StartAsync();
@@ -47,27 +45,10 @@ namespace BTCPayServer.Tests
         }
 
         [Fact]
-        [Trait("Fast", "Fast")]
-        public void LoadSubChainsAlways()
-        {
-            var config = new ConfigurationRoot(new List<IConfigurationProvider>()
-            {
-                new MemoryConfigurationProvider(new MemoryConfigurationSource()
-                {
-                    InitialData = new[] {new KeyValuePair<string, string>("chains", "usdt"),}
-                })
-            });
-            var networkProvider = config.ConfigureNetworkProvider();
-            Assert.NotNull(networkProvider.GetNetwork("LBTC"));
-            Assert.NotNull(networkProvider.GetNetwork("USDT"));
-        }
-
-
-        [Fact]
         [Trait("Altcoins", "Altcoins")]
         public async Task ElementsAssetsAreHandledCorrectly()
         {
-            using (var tester = ServerTester.Create())
+            using (var tester = CreateServerTester())
             {
                 tester.ActivateLBTC();
                 await tester.StartAsync();
